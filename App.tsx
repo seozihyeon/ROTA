@@ -26,6 +26,28 @@ const App: React.FC = () => {
         bookmarks: new Set(parsed.bookmarks || []),
       });
     }
+
+    // 초기 히스토리 상태 설정 (홈)
+    window.history.replaceState({ view: ViewMode.HOME }, '');
+  }, []);
+
+  // 하드웨어 뒤로가기 버튼 감지 로직
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state && event.state.view) {
+        setView(event.state.view);
+        // 만약 홈으로 돌아가는 거라면 선택된 챕터도 해제
+        if (event.state.view === ViewMode.HOME) {
+          setSelectedChapter(null);
+        }
+      } else {
+        setView(ViewMode.HOME);
+        setSelectedChapter(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   // Save progress
@@ -38,9 +60,21 @@ const App: React.FC = () => {
     localStorage.setItem('rota_progress_v3', JSON.stringify(dataToSave));
   }, [progress]);
 
-  const handleStartChapter = (chapter: Chapter) => {
+  // 네비게이션 헬퍼 (히스토리 푸시 포함)
+  const navigateTo = (newView: ViewMode, chapter: Chapter | null = null) => {
+    setView(newView);
     setSelectedChapter(chapter);
-    setView(ViewMode.STUDY);
+    window.history.pushState({ view: newView, chapterId: chapter?.id }, '');
+  };
+
+  const handleBack = () => {
+    // 인앱 뒤로가기 클릭 시 브라우저 히스토리 뒤로가기 실행
+    // 이를 통해 popstate 이벤트가 발생하고 위에서 등록한 handlePopState가 실행됨
+    window.history.back();
+  };
+
+  const handleStartChapter = (chapter: Chapter) => {
+    navigateTo(ViewMode.STUDY, chapter);
   };
 
   const markKnown = useCallback((sentenceId: number, chapterId: number) => {
@@ -97,7 +131,6 @@ const App: React.FC = () => {
     if (selectedChapter.id === 999) {
       return ALL_SENTENCES.filter(s => progress.bookmarks.has(s.id));
     }
-    // 레벨별 범위 누적 적용
     return ALL_SENTENCES.filter(s => s.id >= selectedChapter.range[0] && s.id <= selectedChapter.range[1]);
   }, [selectedChapter?.id, progress.bookmarks.size]);
 
@@ -113,7 +146,7 @@ const App: React.FC = () => {
           onSelectChapter={handleStartChapter} 
           chapterKnownIds={progress.chapterKnownIds}
           onResetChapter={resetChapterProgress}
-          onViewBookmarks={() => setView(ViewMode.BOOKMARKS)}
+          onViewBookmarks={() => navigateTo(ViewMode.BOOKMARKS)}
           bookmarkCount={progress.bookmarks.size}
         />
       )}
@@ -121,12 +154,11 @@ const App: React.FC = () => {
       {view === ViewMode.BOOKMARKS && (
         <BookmarkListView 
           sentences={bookmarkedSentences}
-          onBack={() => setView(ViewMode.HOME)}
+          onBack={handleBack}
           onToggleBookmark={toggleBookmark}
           onStartStudy={() => {
             const bookmarkChapter: Chapter = { id: 999, title: '저장된 문장', range: [0, 0] };
-            setSelectedChapter(bookmarkChapter);
-            setView(ViewMode.STUDY);
+            navigateTo(ViewMode.STUDY, bookmarkChapter);
           }}
         />
       )}
@@ -137,10 +169,7 @@ const App: React.FC = () => {
           sentences={currentSentences}
           knownIds={new Set(progress.chapterKnownIds[selectedChapter.id] || [])}
           bookmarks={progress.bookmarks}
-          onBack={() => {
-            if (selectedChapter.id === 999) setView(ViewMode.BOOKMARKS);
-            else setView(ViewMode.HOME);
-          }}
+          onBack={handleBack}
           onMarkKnown={(id) => markKnown(id, selectedChapter.id)}
           onMarkUnknown={markUnknown}
           onToggleBookmark={toggleBookmark}
