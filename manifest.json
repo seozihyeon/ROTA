@@ -3,7 +3,7 @@
   "name": "ROTA 영어 회독",
   "short_name": "ROTA",
   "description": "반복 학습을 통한 영어 회화 암기 앱",
-  "start_url": ".",
+  "start_url": "index.html",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
