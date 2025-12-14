@@ -12,6 +12,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="ROTA English">
     <meta name="theme-color" content="#7c3aed">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2436/2436702.png">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -21,15 +22,24 @@
             font-family: 'Noto Sans KR', sans-serif;
             background-color: #f3f4f6;
             -webkit-tap-highlight-color: transparent;
-            /* 모바일 롱프레스 메뉴 방지 */
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             user-select: none;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
         }
-        /* 입력창이나 특정 영역만 선택 가능하게 */
         input, textarea {
             -webkit-user-select: auto;
             user-select: auto;
+        }
+        
+        @media all and (display-mode: standalone) {
+            body {
+                background-color: #ffffff;
+            }
         }
     </style>
 <script type="importmap">
@@ -41,10 +51,9 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body>
     <div id="root"></div>
-<script type="module" src="/index.tsx"></script>
+    <script type="module" src="index.tsx"></script>
 </body>
 </html>
