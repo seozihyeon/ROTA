@@ -3,7 +3,7 @@ import { Sentence, Chapter } from './types';
 
 export const ALL_SENTENCES: Sentence[] = [
   // --- 1-100 ---
-  { id: 1, korean: "그말 취소 할께. / 방금 한 말 취소", english: "I take that back." },
+  { id: 1, korean: "그말 취소 할게. / 방금 한 말 취소", english: "I take that back." },
   { id: 2, korean: "내 폰이 없어졌어.", english: "My phone is missing." },
   { id: 3, korean: "나 완전 멘붕이야.", english: "I'm falling apart." },
   { id: 4, korean: "커피는 내가 쏠게.", english: "Coffee's on me." },
