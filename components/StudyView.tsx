@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Sentence, Chapter } from '../types';
 import { THEME_COLOR, SECONDARY_COLOR } from '../constants';
@@ -34,7 +33,6 @@ const StudyView: React.FC<StudyViewProps> = ({
   const [isAllFinished, setIsAllFinished] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // 세션 시작 시점의 '이미 아는 문장' 기록
   const initialKnownIds = useRef<Set<number>>(new Set(knownIds));
   const chapterIdRef = useRef(chapter.id);
 
@@ -64,7 +62,7 @@ const StudyView: React.FC<StudyViewProps> = ({
   const handleKnown = () => {
     if (!currentSentence) return;
     onMarkKnown(currentSentence.id);
-    proceedToNext(false);
+    proceedToNext();
   };
 
   const handleUnknown = () => {
@@ -72,11 +70,12 @@ const StudyView: React.FC<StudyViewProps> = ({
     onMarkUnknown(currentSentence.id);
     const nextUnknowns = [...unknownsInCurrentRound, currentSentence];
     setUnknownsInCurrentRound(nextUnknowns);
-    proceedToNext(true, nextUnknowns);
+    proceedToNext(nextUnknowns);
   };
 
-  const proceedToNext = (wasUnknown: boolean, updatedUnknowns?: Sentence[]) => {
-    setShowAnswer(false);
+  const proceedToNext = (updatedUnknowns?: Sentence[]) => {
+    // 다음 문장으로 넘어가기 전 정답을 즉시 가립니다.
+    setShowAnswer(false); 
     const isLastInRound = currentIndex === sessionSentences.length - 1;
 
     if (!isLastInRound) {
@@ -111,115 +110,108 @@ const StudyView: React.FC<StudyViewProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-white relative">
+    <div className="flex-1 flex flex-col bg-white relative h-full">
       {/* Header */}
-      <div className="px-6 py-6 flex items-center justify-between text-white shadow-lg z-10" style={{ background: `linear-gradient(135deg, ${THEME_COLOR}, ${SECONDARY_COLOR})` }}>
+      <div className="px-6 py-8 flex items-center justify-between text-white shadow-lg z-10" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
         <button onClick={onBack} className="w-10 h-10 flex items-center justify-center hover:bg-white/10 rounded-xl transition-colors">
-          <i className="fa-solid fa-arrow-left"></i>
+          <i className="fa-solid fa-arrow-left text-xl"></i>
         </button>
         <div className="text-center">
-          <div className="text-[10px] font-black uppercase tracking-[0.3em] opacity-70 mb-0.5">{chapter.id === 999 ? 'MY NOTE' : chapter.title} • {round} ROUND</div>
-          <div className="text-sm font-black italic tracking-tighter">
+          <div className="text-[11px] font-black uppercase tracking-[0.3em] opacity-80 mb-1">
+            {chapter.id === 999 ? 'MY NOTE' : `LEVEL ${chapter.id} • ${round} ROUND`}
+          </div>
+          <div className="text-xl font-black italic tracking-tighter">
             {currentIndex + 1} / {sessionSentences.length}
           </div>
         </div>
         <button onClick={onBack} className="w-10 h-10 flex items-center justify-center hover:bg-white/10 rounded-xl transition-colors">
-          <i className="fa-solid fa-xmark"></i>
+          <i className="fa-solid fa-xmark text-xl"></i>
         </button>
       </div>
 
-      {/* Progress Bar */}
-      <div className="w-full h-1.5 bg-slate-100 z-10">
-        <div 
-          className="h-full transition-all duration-500 ease-out" 
-          style={{ 
-            backgroundColor: THEME_COLOR, 
-            width: `${((currentIndex + 1) / (sessionSentences.length || 1)) * 100}%` 
-          }}
-        />
-      </div>
-
-      {/* Card Area */}
-      <div className={`flex-1 flex flex-col p-8 items-center justify-center text-center relative overflow-hidden bg-white ${isAllFinished ? 'blur-sm grayscale' : ''}`}>
+      {/* Main Study Area */}
+      <div className={`flex-1 flex flex-col items-center relative bg-white ${isAllFinished ? 'blur-sm grayscale' : ''}`}>
         {!isAllFinished && currentSentence ? (
           <>
+            {/* Bookmark */}
             <button 
               onClick={() => onToggleBookmark(currentSentence.id)}
-              className="absolute top-10 right-10 text-3xl transition-transform active:scale-150 hover:scale-110 z-20"
-              style={{ color: bookmarks.has(currentSentence.id) ? '#f59e0b' : '#f1f5f9' }}
+              className="absolute top-8 right-8 text-4xl transition-transform active:scale-150 z-20"
+              style={{ color: bookmarks.has(currentSentence.id) ? '#fbbf24' : '#f1f5f9' }}
             >
               <i className="fa-solid fa-star"></i>
             </button>
 
-            <div className="w-full max-w-sm flex flex-col items-center">
-              {/* English revealed ABOVE Korean */}
-              <div className={`transition-all duration-500 transform w-full mb-12 ${showAnswer ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-[-20px] scale-95 pointer-events-none'}`}>
-                 <h3 className="text-3xl font-black text-indigo-600 italic tracking-tight leading-tight mb-4">
+            {/* Sentence Content */}
+            <div className="w-full max-w-sm flex flex-col items-center px-8 mt-32 mb-6">
+              {/* English (정답) */}
+              <div className={`transform w-full text-center h-12 flex items-center justify-center mb-6 
+                ${showAnswer 
+                  ? 'opacity-100 translate-y-0 transition-all duration-300' 
+                  : 'opacity-0 translate-y-[-10px] pointer-events-none'
+                }`}>
+                 <h3 className="text-3xl font-black text-indigo-600 italic tracking-tight leading-tight">
                    {currentSentence.english}
                  </h3>
-                 <div className="w-12 h-1 bg-indigo-100 mx-auto rounded-full"></div>
               </div>
 
-              {/* Korean always visible or central */}
-              <h2 className={`font-black leading-snug transition-all duration-500 text-slate-800 ${showAnswer ? 'text-xl opacity-60' : 'text-3xl'}`}>
+              {/* Korean (문제) */}
+              <h2 className="text-3xl font-black leading-snug text-slate-800 text-center">
                 {currentSentence.korean}
               </h2>
             </div>
+
+            {/* Raised Buttons Block */}
+            <div className="w-full flex flex-col gap-4 px-6 max-w-[380px] mt-8">
+              <div className="grid grid-cols-2 gap-4">
+                  <button 
+                    onClick={() => setShowAnswer(true)}
+                    className="h-16 rounded-[1.2rem] bg-white border border-slate-200 flex items-center justify-center gap-3 font-black text-slate-700 active:bg-slate-50 active:scale-95 transition-all shadow-[0_4px_10px_rgba(0,0,0,0.05)]"
+                  >
+                    <i className="fa-solid fa-eye text-[#6366f1] text-lg"></i>
+                    정답 확인
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (!currentSentence) return;
+                      const msg = new SpeechSynthesisUtterance(currentSentence.english);
+                      msg.lang = 'en-US';
+                      window.speechSynthesis.speak(msg);
+                    }}
+                    className="h-16 rounded-[1.2rem] bg-white border border-slate-200 flex items-center justify-center gap-3 font-black text-slate-700 active:bg-slate-50 active:scale-95 transition-all shadow-[0_4px_10px_rgba(0,0,0,0.05)]"
+                  >
+                    <i className="fa-solid fa-volume-high text-[#3b82f6] text-lg"></i>
+                    발음
+                  </button>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                  <button 
+                    onClick={handleUnknown}
+                    className="h-16 rounded-[1.5rem] bg-[#f43f5e] text-white font-black shadow-[0_8px_20px_rgba(244,63,94,0.3)] active:scale-95 transition-all flex items-center justify-center text-lg"
+                  >
+                    모르겠음
+                  </button>
+                  <button 
+                    onClick={handleKnown}
+                    className="h-16 rounded-[1.5rem] bg-[#6366f1] text-white font-black shadow-[0_8px_20px_rgba(99,102,241,0.3)] active:scale-95 transition-all flex items-center justify-center text-lg"
+                  >
+                    알고있음
+                  </button>
+              </div>
+            </div>
           </>
         ) : !isAllFinished && (
-           <div className="text-slate-400 font-bold">로딩 중...</div>
+           <div className="flex-1 flex items-center justify-center text-slate-400 font-bold">로딩 중...</div>
         )}
       </div>
-
-      {/* Bottom Buttons */}
-      {!isAllFinished && (
-        <div className="p-6 bg-slate-50 flex flex-col gap-4 pb-12 border-t border-slate-100 z-10">
-          <div className="grid grid-cols-2 gap-3">
-              <button 
-                onClick={() => setShowAnswer(true)}
-                className="h-14 rounded-2xl bg-white border-2 border-slate-200 flex items-center justify-center gap-2 font-black text-slate-700 active:bg-slate-100 active:scale-95 transition-all shadow-sm"
-              >
-                <i className="fa-solid fa-eye text-indigo-500"></i>
-                정답 확인
-              </button>
-              <button 
-                onClick={() => {
-                  if (!currentSentence) return;
-                  const msg = new SpeechSynthesisUtterance(currentSentence.english);
-                  msg.lang = 'en-US';
-                  window.speechSynthesis.speak(msg);
-                }}
-                className="h-14 rounded-2xl bg-white border-2 border-slate-200 flex items-center justify-center gap-2 font-black text-slate-700 active:bg-slate-100 active:scale-95 transition-all shadow-sm"
-              >
-                <i className="fa-solid fa-volume-high text-indigo-500"></i>
-                발음
-              </button>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3">
-              <button 
-                onClick={handleUnknown}
-                className="h-16 rounded-[1.5rem] bg-rose-500 text-white font-black shadow-lg shadow-rose-200 active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                모르겠음
-              </button>
-              <button 
-                onClick={handleKnown}
-                className="h-16 rounded-[1.5rem] text-white font-black shadow-lg shadow-indigo-200 active:scale-95 transition-all flex items-center justify-center gap-2"
-                style={{ background: `linear-gradient(135deg, ${THEME_COLOR}, ${SECONDARY_COLOR})` }}
-              >
-                알고있음
-              </button>
-          </div>
-        </div>
-      )}
 
       {/* Completion Modal */}
       {isAllFinished && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-[2px]">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-[320px] shadow-2xl flex flex-col animate-modal-pop relative">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-[320px] shadow-2xl flex flex-col animate-modal-pop relative overflow-visible">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
-               <div className="w-32 h-32 rounded-full border-[6px] border-white shadow-xl flex flex-col items-center justify-center text-white p-2 text-center" style={{ backgroundColor: THEME_COLOR }}>
+               <div className="w-32 h-32 rounded-full border-[6px] border-white shadow-xl flex flex-col items-center justify-center text-white p-2 text-center" style={{ backgroundColor: '#6366f1' }}>
                  <span className="text-[10px] font-black leading-none mb-1">회독</span>
                  <span className="text-2xl font-black italic leading-none">ROTA</span>
                </div>
@@ -228,11 +220,11 @@ const StudyView: React.FC<StudyViewProps> = ({
             <div className="p-8 pt-20 flex flex-col items-center">
               <h2 className="text-2xl font-black text-slate-800 mb-8">축하드립니다!</h2>
               <div className="w-full space-y-5 mb-10">
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center border-b border-slate-50 pb-2">
                   <span className="text-slate-400 font-bold text-sm">레벨 :</span>
                   <span className="text-slate-800 font-black">{chapter.id === 999 ? 'MY NOTE' : chapter.title}</span>
                 </div>
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center border-b border-slate-50 pb-2">
                   <span className="text-slate-400 font-bold text-sm">회독 :</span>
                   <span className="text-slate-800 font-black">{round}회독 완료</span>
                 </div>
@@ -245,7 +237,7 @@ const StudyView: React.FC<StudyViewProps> = ({
               <button 
                 onClick={onBack}
                 className="w-full py-5 rounded-[1.8rem] text-white font-black shadow-lg transition-all active:scale-95 text-lg"
-                style={{ backgroundColor: THEME_COLOR }}
+                style={{ backgroundColor: '#6366f1' }}
               >
                 확인
               </button>
