@@ -34,11 +34,10 @@ const StudyView: React.FC<StudyViewProps> = ({
   const [isAllFinished, setIsAllFinished] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // 세션 시작 시점의 '이미 아는 문장' 기록 (세션 도중 리셋 방지용)
+  // 세션 시작 시점의 '이미 아는 문장' 기록
   const initialKnownIds = useRef<Set<number>>(new Set(knownIds));
   const chapterIdRef = useRef(chapter.id);
 
-  // 초기 문장 로드 (마운트 시 또는 챕터 변경 시 1회만 실행)
   useEffect(() => {
     if (isInitializing || chapter.id !== chapterIdRef.current) {
       const initial = sentences.filter(s => !initialKnownIds.current.has(s.id));
@@ -52,7 +51,6 @@ const StudyView: React.FC<StudyViewProps> = ({
     }
   }, [sentences, chapter.id, isInitializing]);
 
-  // 타이머
   useEffect(() => {
     if (isAllFinished) return;
     const timer = setInterval(() => {
@@ -66,42 +64,27 @@ const StudyView: React.FC<StudyViewProps> = ({
   const handleKnown = () => {
     if (!currentSentence) return;
     onMarkKnown(currentSentence.id);
-    // '알고있음'은 unknownsInCurrentRound에 추가하지 않고 다음으로 이동
     proceedToNext(false);
   };
 
   const handleUnknown = () => {
     if (!currentSentence) return;
     onMarkUnknown(currentSentence.id);
-    
-    // 현재 문장을 다음 라운드 풀에 추가
     const nextUnknowns = [...unknownsInCurrentRound, currentSentence];
     setUnknownsInCurrentRound(nextUnknowns);
-    
     proceedToNext(true, nextUnknowns);
   };
 
   const proceedToNext = (wasUnknown: boolean, updatedUnknowns?: Sentence[]) => {
     setShowAnswer(false);
-    
     const isLastInRound = currentIndex === sessionSentences.length - 1;
 
     if (!isLastInRound) {
       setCurrentIndex(prev => prev + 1);
     } else {
-      // 라운드 종료 시점의 '모르는 문장' 리스트 확정
       const finalPool = updatedUnknowns || unknownsInCurrentRound;
-        
       if (finalPool.length > 0) {
         const nextRoundNum = round + 1;
-        
-        // 4회독 이상 시 남은 모든 문장 자동 북마크
-        if (nextRoundNum >= 4) {
-          finalPool.forEach(s => {
-            if (!bookmarks.has(s.id)) onToggleBookmark(s.id);
-          });
-        }
-
         const shuffled = [...finalPool].sort(() => Math.random() - 0.5);
         setSessionSentences(shuffled);
         setUnknownsInCurrentRound([]);
@@ -157,28 +140,30 @@ const StudyView: React.FC<StudyViewProps> = ({
       </div>
 
       {/* Card Area */}
-      <div className={`flex-1 flex flex-col p-10 items-center justify-center text-center relative overflow-hidden bg-white ${isAllFinished ? 'blur-sm grayscale' : ''}`}>
+      <div className={`flex-1 flex flex-col p-8 items-center justify-center text-center relative overflow-hidden bg-white ${isAllFinished ? 'blur-sm grayscale' : ''}`}>
         {!isAllFinished && currentSentence ? (
           <>
             <button 
               onClick={() => onToggleBookmark(currentSentence.id)}
-              className="absolute top-10 right-10 text-3xl transition-transform active:scale-150 hover:scale-110"
+              className="absolute top-10 right-10 text-3xl transition-transform active:scale-150 hover:scale-110 z-20"
               style={{ color: bookmarks.has(currentSentence.id) ? '#f59e0b' : '#f1f5f9' }}
             >
               <i className="fa-solid fa-star"></i>
             </button>
 
-            <div className="w-full max-w-sm">
-              <h2 className={`font-black leading-snug transition-all duration-500 mb-8 ${showAnswer ? 'text-slate-300 text-xl opacity-40 translate-y-[-20px]' : 'text-slate-800 text-3xl'}`}>
-                {currentSentence.korean}
-              </h2>
-
-              <div className={`transition-all duration-500 transform ${showAnswer ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-10 scale-90 pointer-events-none'}`}>
-                 <div className="w-8 h-1 bg-indigo-200 mx-auto mb-8 rounded-full"></div>
+            <div className="w-full max-w-sm flex flex-col items-center">
+              {/* English revealed ABOVE Korean */}
+              <div className={`transition-all duration-500 transform w-full mb-12 ${showAnswer ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-[-20px] scale-95 pointer-events-none'}`}>
                  <h3 className="text-3xl font-black text-indigo-600 italic tracking-tight leading-tight mb-4">
                    {currentSentence.english}
                  </h3>
+                 <div className="w-12 h-1 bg-indigo-100 mx-auto rounded-full"></div>
               </div>
+
+              {/* Korean always visible or central */}
+              <h2 className={`font-black leading-snug transition-all duration-500 text-slate-800 ${showAnswer ? 'text-xl opacity-60' : 'text-3xl'}`}>
+                {currentSentence.korean}
+              </h2>
             </div>
           </>
         ) : !isAllFinished && (
@@ -233,7 +218,6 @@ const StudyView: React.FC<StudyViewProps> = ({
       {isAllFinished && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-[2px]">
           <div className="bg-white rounded-[2.5rem] w-full max-w-[320px] shadow-2xl flex flex-col animate-modal-pop relative">
-            {/* Circle Logo Overlay */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
                <div className="w-32 h-32 rounded-full border-[6px] border-white shadow-xl flex flex-col items-center justify-center text-white p-2 text-center" style={{ backgroundColor: THEME_COLOR }}>
                  <span className="text-[10px] font-black leading-none mb-1">회독</span>
@@ -243,7 +227,6 @@ const StudyView: React.FC<StudyViewProps> = ({
 
             <div className="p-8 pt-20 flex flex-col items-center">
               <h2 className="text-2xl font-black text-slate-800 mb-8">축하드립니다!</h2>
-              
               <div className="w-full space-y-5 mb-10">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 font-bold text-sm">레벨 :</span>
@@ -251,7 +234,7 @@ const StudyView: React.FC<StudyViewProps> = ({
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 font-bold text-sm">회독 :</span>
-                  <span className="text-slate-800 font-black">{round}회독</span>
+                  <span className="text-slate-800 font-black">{round}회독 완료</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 font-bold text-sm">걸린시간 :</span>
