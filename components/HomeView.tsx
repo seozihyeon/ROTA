@@ -20,7 +20,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   bookmarkCount,
   onResetChapter
 }) => {
-  const [showConfirm, setShowConfirm] = useState<{from: Chapter, to: Chapter} | null>(null);
+  const [showConfirm, setShowConfirm] = useState<{from: Chapter, to: Chapter, message: string} | null>(null);
 
   const getInProgressChapter = () => {
     for (const ch of chapters) {
@@ -34,16 +34,42 @@ const HomeView: React.FC<HomeViewProps> = ({
   const inProgressChapter = getInProgressChapter();
 
   const handleChapterClick = (targetChapter: Chapter) => {
+    const knownInTarget = chapterKnownIds[targetChapter.id] || [];
+    const totalInTarget = targetChapter.range[1] - targetChapter.range[0] + 1;
+    const isCompleted = knownInTarget.length >= totalInTarget;
+
+    // 1. 다른 장이 이미 진행 중인 경우
     if (inProgressChapter && inProgressChapter.id !== targetChapter.id) {
-      setShowConfirm({ from: inProgressChapter, to: targetChapter });
-    } else {
-      onSelectChapter(targetChapter);
+      setShowConfirm({ 
+        from: inProgressChapter, 
+        to: targetChapter, 
+        message: "현재 진행 중인 학습이 있습니다. 중단하고 이 단계를 새로 시작하시겠습니까?" 
+      });
+      return;
     }
+
+    // 2. 클릭한 장이 이미 완료된 경우 (다시 처음부터 회독하기 위해 초기화 질문)
+    if (isCompleted) {
+      setShowConfirm({ 
+        from: targetChapter, 
+        to: targetChapter, 
+        message: "이미 완료된 단계입니다. 초기화하고 다시 1회독을 시작하시겠습니까?" 
+      });
+      return;
+    }
+
+    // 3. 그 외 (처음 시작하거나 진행 중인 장을 다시 누른 경우)
+    onSelectChapter(targetChapter);
   };
 
   const confirmSwitch = () => {
     if (showConfirm) {
-      onResetChapter(showConfirm.from.id);
+      // 대상 장을 초기화하고 시작
+      onResetChapter(showConfirm.to.id);
+      // 만약 진행 중인 다른 장이 있었다면 그것도 초기화 (앱 구조상 한 번에 하나만 진행)
+      if (showConfirm.from.id !== showConfirm.to.id) {
+          onResetChapter(showConfirm.from.id);
+      }
       onSelectChapter(showConfirm.to);
       setShowConfirm(null);
     }
@@ -118,6 +144,9 @@ const HomeView: React.FC<HomeViewProps> = ({
                   {isInProgress && (
                     <span className="text-[8px] font-black bg-indigo-600 text-white px-2 py-0.5 rounded-md uppercase animate-pulse">Study</span>
                   )}
+                  {isCompleted && (
+                    <span className="text-[8px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-md uppercase">Done</span>
+                  )}
                 </div>
                 
                 <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 mb-2">
@@ -142,19 +171,19 @@ const HomeView: React.FC<HomeViewProps> = ({
         })}
       </div>
 
-      {/* Switching Confirmation Modal */}
+      {/* Switching/Restart Confirmation Modal */}
       {showConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white rounded-[2rem] w-full max-w-sm p-8 shadow-2xl animate-pop-up">
-            <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
-              <i className="fa-solid fa-triangle-exclamation"></i>
+            <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
+              <i className="fa-solid fa-rotate-left"></i>
             </div>
-            <h3 className="text-xl font-black text-center text-slate-800 mb-2">학습을 포기하시겠어요?</h3>
+            <h3 className="text-xl font-black text-center text-slate-800 mb-2">학습을 시작할까요?</h3>
             <p className="text-center text-slate-500 text-sm leading-relaxed mb-8">
-              이동 시 현재 장의 진행률이 초기화됩니다.
+              {showConfirm.message}
             </p>
             <div className="flex flex-col gap-3">
-              <button onClick={confirmSwitch} className="w-full py-4 rounded-2xl bg-rose-500 text-white font-black text-sm shadow-lg active:scale-95 transition-all">네, 포기하고 시작할게요</button>
+              <button onClick={confirmSwitch} className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-black text-sm shadow-lg active:scale-95 transition-all">네, 새로 시작할게요</button>
               <button onClick={() => setShowConfirm(null)} className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-black text-sm active:scale-95 transition-all">취소</button>
             </div>
           </div>
