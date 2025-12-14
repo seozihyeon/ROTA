@@ -1,0 +1,7 @@
+{
+  "name": "Repeat English",
+  "description": "A high-efficiency English sentence memorization app focusing on repetitive recall (Hwidok) with a smart filtering system for unknown sentences.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
