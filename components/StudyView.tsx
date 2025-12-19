@@ -42,7 +42,9 @@ const StudyView: React.FC<StudyViewProps> = ({
       if (initial.length === 0) {
         setIsAllFinished(true);
       } else {
-        setSessionSentences(initial);
+        // 초기 순서 랜덤 섞기
+        const shuffled = [...initial].sort(() => Math.random() - 0.5);
+        setSessionSentences(shuffled);
       }
       setIsInitializing(false);
       chapterIdRef.current = chapter.id;
