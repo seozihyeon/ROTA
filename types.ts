@@ -15,6 +15,8 @@ export interface UserProgress {
   chapterKnownIds: Record<number, number[]>; 
   failCounts: Record<number, number>; 
   bookmarks: Set<number>;
+  seenIds?: Record<number, number[]>;
+  unknownQueue?: Record<number, number[]>;
 }
 
 export enum ViewMode {

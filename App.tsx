@@ -13,6 +13,8 @@ const App: React.FC = () => {
     chapterKnownIds: {},
     failCounts: {},
     bookmarks: new Set<number>(),
+    seenIds: {},
+    unknownQueue: {},
   });
 
   // Load progress
@@ -24,6 +26,8 @@ const App: React.FC = () => {
         chapterKnownIds: parsed.chapterKnownIds || {},
         failCounts: parsed.failCounts || {},
         bookmarks: new Set(parsed.bookmarks || []),
+        seenIds: parsed.seenIds || {},
+        unknownQueue: parsed.unknownQueue || {},
       });
     }
 
@@ -56,6 +60,8 @@ const App: React.FC = () => {
       chapterKnownIds: progress.chapterKnownIds,
       failCounts: progress.failCounts,
       bookmarks: Array.from(progress.bookmarks),
+      seenIds: progress.seenIds || {},
+      unknownQueue: progress.unknownQueue || {},
     };
     localStorage.setItem('rota_progress_v3', JSON.stringify(dataToSave));
   }, [progress]);
@@ -81,13 +87,25 @@ const App: React.FC = () => {
     setProgress(prev => {
       const currentChapterKnown = prev.chapterKnownIds[chapterId] || [];
       if (currentChapterKnown.includes(sentenceId)) return prev;
-      
+      const nextSeen = { ...(prev.seenIds || {}) };
+      const seenList = new Set(nextSeen[chapterId] || []);
+      seenList.add(sentenceId);
+      nextSeen[chapterId] = Array.from(seenList);
+
+      const nextUnknown = { ...(prev.unknownQueue || {}) };
+      if (nextUnknown[chapterId]) {
+        nextUnknown[chapterId] = nextUnknown[chapterId].filter(i => i !== sentenceId);
+        if (nextUnknown[chapterId].length === 0) delete nextUnknown[chapterId];
+      }
+
       return {
         ...prev,
         chapterKnownIds: {
           ...prev.chapterKnownIds,
           [chapterId]: [...currentChapterKnown, sentenceId]
-        }
+        },
+        seenIds: nextSeen,
+        unknownQueue: nextUnknown
       };
     });
   }, []);
@@ -96,24 +114,42 @@ const App: React.FC = () => {
     setProgress(prev => {
       const nextChapterKnownIds = { ...prev.chapterKnownIds };
       delete nextChapterKnownIds[chapterId];
+      const nextSeen = { ...(prev.seenIds || {}) };
+      delete nextSeen[chapterId];
       return {
         ...prev,
-        chapterKnownIds: nextChapterKnownIds
+        chapterKnownIds: nextChapterKnownIds,
+        seenIds: nextSeen
       };
     });
   };
 
-  const markUnknown = useCallback((id: number) => {
+  const markUnknown = useCallback((id: number, chapterId: number) => {
     setProgress(prev => {
       const nextFailCounts = { ...prev.failCounts };
       nextFailCounts[id] = (nextFailCounts[id] || 0) + 1;
-      
+
       const nextBookmarks = new Set(prev.bookmarks);
       if (nextFailCounts[id] >= 3) {
         nextBookmarks.add(id);
       }
-      
-      return { ...prev, failCounts: nextFailCounts, bookmarks: nextBookmarks };
+
+      const nextUnknown = { ...(prev.unknownQueue || {}) };
+      const list = new Set(nextUnknown[chapterId] || []);
+      list.add(id);
+      nextUnknown[chapterId] = Array.from(list);
+
+      return { ...prev, failCounts: nextFailCounts, bookmarks: nextBookmarks, unknownQueue: nextUnknown };
+    });
+  }, []);
+
+  const consumeUnknowns = useCallback((chapterId: number, ids: number[]) => {
+    setProgress(prev => {
+      const nextUnknown = { ...(prev.unknownQueue || {}) };
+      if (!nextUnknown[chapterId]) return prev;
+      nextUnknown[chapterId] = (nextUnknown[chapterId] || []).filter(i => !ids.includes(i));
+      if (nextUnknown[chapterId].length === 0) delete nextUnknown[chapterId];
+      return { ...prev, unknownQueue: nextUnknown };
     });
   }, []);
 
@@ -128,11 +164,19 @@ const App: React.FC = () => {
 
   const currentSentences = useMemo(() => {
     if (!selectedChapter) return [];
+    const seenInChapter = new Set((progress.seenIds && progress.seenIds[selectedChapter.id]) || []);
+    const unknownInChapter = new Set((progress.unknownQueue && progress.unknownQueue[selectedChapter.id]) || []);
+
     if (selectedChapter.id === 999) {
-      return ALL_SENTENCES.filter(s => progress.bookmarks.has(s.id));
+      // 북마크 모드: 북마크된 문장 중 이미 본 것은 제외
+      return ALL_SENTENCES.filter(s => progress.bookmarks.has(s.id) && !seenInChapter.has(s.id));
     }
-    return ALL_SENTENCES.filter(s => s.id >= selectedChapter.range[0] && s.id <= selectedChapter.range[1]);
-  }, [selectedChapter?.id, progress.bookmarks.size]);
+
+    const knownInChapter = new Set(progress.chapterKnownIds[selectedChapter.id] || []);
+    return ALL_SENTENCES
+      .filter(s => s.id >= selectedChapter.range[0] && s.id <= selectedChapter.range[1])
+      .filter(s => !knownInChapter.has(s.id) && !seenInChapter.has(s.id) && !unknownInChapter.has(s.id));
+  }, [selectedChapter?.id, progress.bookmarks.size, progress.chapterKnownIds, progress.seenIds, progress.unknownQueue]);
 
   const bookmarkedSentences = useMemo(() => {
     return ALL_SENTENCES.filter(s => progress.bookmarks.has(s.id));
@@ -171,7 +215,10 @@ const App: React.FC = () => {
           bookmarks={progress.bookmarks}
           onBack={handleBack}
           onMarkKnown={(id) => markKnown(id, selectedChapter.id)}
-          onMarkUnknown={markUnknown}
+            onMarkUnknown={(id) => markUnknown(id, selectedChapter.id)}
+          seenOffset={(progress.seenIds && progress.seenIds[selectedChapter.id]) ? progress.seenIds[selectedChapter.id].length : 0}
+          pendingUnknowns={(progress.unknownQueue && progress.unknownQueue[selectedChapter.id]) ? ALL_SENTENCES.filter(s => (progress.unknownQueue![selectedChapter.id] || []).includes(s.id)) : []}
+          onConsumeUnknowns={(ids) => consumeUnknowns(selectedChapter.id, ids)}
           onToggleBookmark={toggleBookmark}
         />
       )}

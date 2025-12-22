@@ -11,6 +11,9 @@ interface StudyViewProps {
   onMarkKnown: (id: number) => void;
   onMarkUnknown: (id: number) => void;
   onToggleBookmark: (id: number) => void;
+  seenOffset?: number;
+  pendingUnknowns?: Sentence[];
+  onConsumeUnknowns?: (ids: number[]) => void;
 }
 
 const StudyView: React.FC<StudyViewProps> = ({
@@ -21,11 +24,15 @@ const StudyView: React.FC<StudyViewProps> = ({
   onBack,
   onMarkKnown,
   onMarkUnknown,
-  onToggleBookmark
+  onToggleBookmark,
+  seenOffset = 0,
+  pendingUnknowns = [],
+  onConsumeUnknowns
 }) => {
   const [round, setRound] = useState(1);
   const [sessionSentences, setSessionSentences] = useState<Sentence[]>([]);
   const [unknownsInCurrentRound, setUnknownsInCurrentRound] = useState<Sentence[]>([]);
+  const unknownsRef = useRef<Sentence[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [startTime] = useState(Date.now());
@@ -35,21 +42,54 @@ const StudyView: React.FC<StudyViewProps> = ({
 
   const initialKnownIds = useRef<Set<number>>(new Set(knownIds));
   const chapterIdRef = useRef(chapter.id);
+  const initialSeenOffsetRef = useRef<number>(seenOffset || 0);
+  const sessionSeenSetRef = useRef<Set<number>>(new Set());
+  const advancesRef = useRef<number>(0);
+  const lastActionRef = useRef<'known' | 'unknown' | null>(null);
+  const [showContinueModal, setShowContinueModal] = useState(false);
 
   useEffect(() => {
     if (isInitializing || chapter.id !== chapterIdRef.current) {
+      // reset per-chapter session counters (capture seen offset once)
+      initialSeenOffsetRef.current = seenOffset || 0;
+      sessionSeenSetRef.current = new Set();
+      advancesRef.current = 0;
+
       const initial = sentences.filter(s => !initialKnownIds.current.has(s.id));
+
+      // if there are pending unknowns from previous sessions (persisted by App), load them
+      if (pendingUnknowns && pendingUnknowns.length > 0) {
+        unknownsRef.current = [...pendingUnknowns];
+      }
+
+      // if there are no initial items to study, but there are pending unknowns,
+      // do not mark finished — show continue modal instead so user can resume.
       if (initial.length === 0) {
-        setIsAllFinished(true);
+        if (unknownsRef.current && unknownsRef.current.length > 0) {
+          setShowContinueModal(true);
+        } else {
+          setIsAllFinished(true);
+        }
       } else {
         // 초기 순서 랜덤 섞기
         const shuffled = [...initial].sort(() => Math.random() - 0.5);
         setSessionSentences(shuffled);
       }
+
       setIsInitializing(false);
       chapterIdRef.current = chapter.id;
+      console.debug('[StudyView] init', { chapterId: chapter.id, seenOffset, initialCount: initial.length, initialSeenOffset: initialSeenOffsetRef.current, knownCount: initialKnownIds.current.size, pendingUnknowns: pendingUnknowns ? pendingUnknowns.length : 0 });
     }
-  }, [sentences, chapter.id, isInitializing]);
+  }, [sentences, chapter.id, isInitializing, pendingUnknowns]);
+
+  // If the session was marked finished but there are unknowns collected,
+  // offer the continue modal again so the user can resume 2nd round after re-entering.
+  useEffect(() => {
+    if (isAllFinished && unknownsRef.current && unknownsRef.current.length > 0 && !showContinueModal) {
+      setShowContinueModal(true);
+      setIsAllFinished(false);
+    }
+  }, [isAllFinished, showContinueModal]);
 
   useEffect(() => {
     if (isAllFinished) return;
@@ -61,40 +101,74 @@ const StudyView: React.FC<StudyViewProps> = ({
 
   const currentSentence = sessionSentences[currentIndex];
 
+  const totalCount = chapter.id === 999 ? bookmarks.size : (chapter.range[1] - chapter.range[0] + 1);
+  const displayIndex = Math.min(initialSeenOffsetRef.current + advancesRef.current + 1, totalCount);
+
   const handleKnown = () => {
     if (!currentSentence) return;
     onMarkKnown(currentSentence.id);
+    // mark as seen in this session
+    sessionSeenSetRef.current.add(currentSentence.id);
+    // count progress only for '알겠음'
+    lastActionRef.current = 'known';
+    advancesRef.current = advancesRef.current + 1;
     proceedToNext();
   };
 
   const handleUnknown = () => {
     if (!currentSentence) return;
     onMarkUnknown(currentSentence.id);
-    const nextUnknowns = [...unknownsInCurrentRound, currentSentence];
-    setUnknownsInCurrentRound(nextUnknowns);
-    proceedToNext(nextUnknowns);
+    // collect unknowns in a ref to avoid state update timing issues
+    unknownsRef.current.push(currentSentence);
+    // mark as seen in this session
+    sessionSeenSetRef.current.add(currentSentence.id);
+    // do NOT increment advances for '모르겠음'
+    lastActionRef.current = 'unknown';
+    proceedToNext();
   };
 
   const proceedToNext = (updatedUnknowns?: Sentence[]) => {
     // 다음 문장으로 넘어가기 전 정답을 즉시 가립니다.
     setShowAnswer(false); 
     const isLastInRound = currentIndex === sessionSentences.length - 1;
-
     if (!isLastInRound) {
       setCurrentIndex(prev => prev + 1);
-    } else {
-      const finalPool = updatedUnknowns || unknownsInCurrentRound;
-      if (finalPool.length > 0) {
-        const nextRoundNum = round + 1;
-        const shuffled = [...finalPool].sort(() => Math.random() - 0.5);
-        setSessionSentences(shuffled);
-        setUnknownsInCurrentRound([]);
-        setCurrentIndex(0);
-        setRound(nextRoundNum);
-      } else {
-        setIsAllFinished(true);
-      }
+      console.debug('[StudyView] next', { chapterId: chapter.id, round, currentIndex: currentIndex + 1, sessionLen: sessionSentences.length, unknowns: unknownsRef.current.length, seenThisSession: sessionSeenSetRef.current.size, initialSeenOffset: initialSeenOffsetRef.current, totalCount, displayIndex });
+      return;
     }
+
+    const finalPool = unknownsRef.current;
+    console.debug('[StudyView] roundEnd', { chapterId: chapter.id, round, finalPoolLen: finalPool.length, unknownsRefLen: unknownsRef.current.length, seenThisSession: sessionSeenSetRef.current.size, initialSeenOffset: initialSeenOffsetRef.current, advances: advancesRef.current, totalCount });
+    if (finalPool && finalPool.length > 0) {
+      // Ask the user whether to continue with the collected unknowns
+      // for every round transition (not only after round 1).
+      setShowContinueModal(true);
+      return;
+    }
+
+    setIsAllFinished(true);
+  };
+
+  const confirmContinue = () => {
+    const finalPool = unknownsRef.current;
+    const nextRoundNum = round + 1;
+    const shuffled = [...finalPool].sort(() => Math.random() - 0.5);
+    setSessionSentences(shuffled);
+    unknownsRef.current = [];
+    setUnknownsInCurrentRound([]);
+    setCurrentIndex(0);
+    setRound(nextRoundNum);
+    setShowContinueModal(false);
+    // inform App to consume pending unknowns so they won't show up as pending again
+    if (onConsumeUnknowns && finalPool && finalPool.length > 0) {
+      onConsumeUnknowns(finalPool.map(s => s.id));
+    }
+    console.debug('[StudyView] startNextRoundConfirmed', { chapterId: chapter.id, nextRoundNum, nextLen: shuffled.length, advances: advancesRef.current });
+  };
+
+  const cancelContinue = () => {
+    // dismiss modal but keep session unfinished so user can resume later
+    setShowContinueModal(false);
   };
 
   const formatTime = (seconds: number) => {
@@ -123,7 +197,7 @@ const StudyView: React.FC<StudyViewProps> = ({
             {chapter.id === 999 ? 'MY NOTE' : `LEVEL ${chapter.id} • ${round} ROUND`}
           </div>
           <div className="text-xl font-black italic tracking-tighter">
-            {currentIndex + 1} / {sessionSentences.length}
+            {displayIndex} / {totalCount}
           </div>
         </div>
         <button onClick={onBack} className="w-10 h-10 flex items-center justify-center hover:bg-white/10 rounded-xl transition-colors">
@@ -247,6 +321,19 @@ const StudyView: React.FC<StudyViewProps> = ({
           </div>
         </div>
       )}
+
+        {showContinueModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-[2px]">
+            <div className="bg-white rounded-[2.5rem] w-full max-w-[320px] shadow-2xl flex flex-col animate-modal-pop relative overflow-visible p-6">
+              <button onClick={cancelContinue} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">✕</button>
+              <h2 className="text-xl font-black text-slate-800 mb-4">회독 완료</h2>
+              <p className="text-slate-500 mb-6">모아둔 '모르겠음' 문장들로 다음 회독을 진행하시겠습니까?</p>
+              <div>
+                <button onClick={confirmContinue} className="w-full py-3 rounded-2xl bg-indigo-600 text-white font-black">네, 이어서 진행</button>
+              </div>
+            </div>
+          </div>
+        )}
 
       <style>{`
         @keyframes modal-pop {
